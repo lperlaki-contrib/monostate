@@ -7,19 +7,19 @@ const TAG_FOUR_B: u8 = 0b1111_0000;
 
 pub unsafe trait RetrieveString {
     // SAFETY: Must contain no padding bytes. Must have alignment of 1.
-    type Type: 'static;
+    type Type: 'static + core::marker::Freeze + Copy;
     // SAFETY: Contents viewed as bytes must be a valid UTF-8 encoding.
-    const BYTES: Self::Type;
+    const BYTES: &Self::Type;
 }
 
 unsafe impl<const CH: char> RetrieveString for alphabet::char<CH> {
     type Type = u8;
-    const BYTES: Self::Type = CH as u8;
+    const BYTES: &Self::Type = &(CH as u8);
 }
 
 unsafe impl<const CH: char> RetrieveString for alphabet::two::char<CH> {
     type Type = [u8; 2];
-    const BYTES: Self::Type = [
+    const BYTES: &Self::Type = &[
         ((CH as u32 >> 6) & 0x1F) as u8 | TAG_TWO_B,
         (CH as u32 & 0x3F) as u8 | TAG_CONT,
     ];
@@ -27,7 +27,7 @@ unsafe impl<const CH: char> RetrieveString for alphabet::two::char<CH> {
 
 unsafe impl<const CH: char> RetrieveString for alphabet::three::char<CH> {
     type Type = [u8; 3];
-    const BYTES: Self::Type = [
+    const BYTES: &Self::Type = &[
         ((CH as u32 >> 12) & 0x0F) as u8 | TAG_THREE_B,
         ((CH as u32 >> 6) & 0x3F) as u8 | TAG_CONT,
         (CH as u32 & 0x3F) as u8 | TAG_CONT,
@@ -36,7 +36,7 @@ unsafe impl<const CH: char> RetrieveString for alphabet::three::char<CH> {
 
 unsafe impl<const CH: char> RetrieveString for alphabet::four::char<CH> {
     type Type = [u8; 4];
-    const BYTES: Self::Type = [
+    const BYTES: &Self::Type = &[
         ((CH as u32 >> 18) & 0x07) as u8 | TAG_FOUR_B,
         ((CH as u32 >> 12) & 0x3F) as u8 | TAG_CONT,
         ((CH as u32 >> 6) & 0x3F) as u8 | TAG_CONT,
@@ -46,9 +46,10 @@ unsafe impl<const CH: char> RetrieveString for alphabet::four::char<CH> {
 
 unsafe impl RetrieveString for () {
     type Type = ();
-    const BYTES: Self::Type = ();
+    const BYTES: &Self::Type = &();
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Concat2<A, B>(A, B);
 
@@ -58,9 +59,10 @@ where
     B: RetrieveString,
 {
     type Type = Concat2<A::Type, B::Type>;
-    const BYTES: Self::Type = Concat2(A::BYTES, B::BYTES);
+    const BYTES: &Self::Type = &Concat2(*A::BYTES, *B::BYTES);
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Concat3<A, B, C>(A, B, C);
 
@@ -71,9 +73,10 @@ where
     C: RetrieveString,
 {
     type Type = Concat3<A::Type, B::Type, C::Type>;
-    const BYTES: Self::Type = Concat3(A::BYTES, B::BYTES, C::BYTES);
+    const BYTES: &Self::Type = &Concat3(*A::BYTES, *B::BYTES, *C::BYTES);
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Concat4<A, B, C, D>(A, B, C, D);
 
@@ -85,9 +88,10 @@ where
     D: RetrieveString,
 {
     type Type = Concat4<A::Type, B::Type, C::Type, D::Type>;
-    const BYTES: Self::Type = Concat4(A::BYTES, B::BYTES, C::BYTES, D::BYTES);
+    const BYTES: &Self::Type = &Concat4(*A::BYTES, *B::BYTES, *C::BYTES, *D::BYTES);
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Concat5<A, B, C, D, E>(A, B, C, D, E);
 
@@ -100,9 +104,10 @@ where
     E: RetrieveString,
 {
     type Type = Concat5<A::Type, B::Type, C::Type, D::Type, E::Type>;
-    const BYTES: Self::Type = Concat5(A::BYTES, B::BYTES, C::BYTES, D::BYTES, E::BYTES);
+    const BYTES: &Self::Type = &Concat5(*A::BYTES, *B::BYTES, *C::BYTES, *D::BYTES, *E::BYTES);
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Concat6<A, B, C, D, E, F>(A, B, C, D, E, F);
 
@@ -116,5 +121,22 @@ where
     F: RetrieveString,
 {
     type Type = Concat6<A::Type, B::Type, C::Type, D::Type, E::Type, F::Type>;
-    const BYTES: Self::Type = Concat6(A::BYTES, B::BYTES, C::BYTES, D::BYTES, E::BYTES, F::BYTES);
+    const BYTES: &Self::Type = &Concat6(
+        *A::BYTES,
+        *B::BYTES,
+        *C::BYTES,
+        *D::BYTES,
+        *E::BYTES,
+        *F::BYTES,
+    );
+}
+
+impl<V: RetrieveString> crate::MustBeValue for crate::MustBeStr<V> {
+    type Type = &'static str;
+    const VALUE: &str = unsafe {
+        core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+            V::BYTES as *const V::Type as *const u8,
+            core::mem::size_of::<V::Type>(),
+        ))
+    };
 }

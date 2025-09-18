@@ -1,5 +1,6 @@
 use crate::string::RetrieveString;
 use serde::{Serialize, Serializer};
+use crate::MustBeValue;
 
 impl<const V: char> Serialize for crate::MustBeChar<V> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -114,7 +115,6 @@ impl<V: RetrieveString> Serialize for crate::MustBeStr<V> {
     where
         S: Serializer,
     {
-        crate::get_str!(s = Self);
-        serializer.serialize_str(s)
+        serializer.serialize_str(Self::VALUE)
     }
 }
